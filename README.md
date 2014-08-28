@@ -1,5 +1,4 @@
 # Extract Kernel Initramfs
----
 
  * This is an updated version of the script found at
    * https://github.com/davidmroth/Extract-Kernel-Initramfs
@@ -22,7 +21,6 @@
   * Use ```eki -h``` to display help.
 
 ## Building
----
 
 There is no "building" involved, simply run:
 ```sh
@@ -54,7 +52,6 @@ The following environment variables can be used
 | no options | same as -q option |
 
 ## Bugs?!?
----
 
 Every program has got them right? Well ok, here's the deal. I've only tested
 this program on a gzip compressed kernel that had a gzip compressed internal
@@ -77,12 +74,11 @@ to contact me via [jkinsella spiryx net]. (You can figure that out right?)
 Another place I can be reached is zer0python@ircs://irc.freenode.net/peltkore
 
 ### Source Files
----
 
 | Filename | Details |
 | -------- | ------- |
 | unpack-initramfs | original script that 'eki' is based on (kept for whatever reason) |
-| -------- | ------- |
+|          |         |
 | main.sh | main invocation of eki |
 | archive.sh | Search for cpio archive in kernel image |
 | cdetect.sh | Uncompress kernel and detect compression functions |
