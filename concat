@@ -1,0 +1,12 @@
+#! /bin/sh
+
+cat header.sh \
+    helper.sh \
+    signature.sh \
+    cdetect.sh \
+    archive.sh \
+    main.sh \
+    \
+    > eki
+
+chmod +x eki
