@@ -38,7 +38,9 @@ $ ./concat
 # or
 $ make
 ```
+
 This concats all the necessary \*.sh files into one script named 'eki'.
+However, the latest "stable" eki script is commited as "eki".
 
 ## Environment Configuration Options
 
