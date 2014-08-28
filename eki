@@ -1,0 +1,400 @@
+#!/bin/bash
+# This is an update version of the script found at 
+# forum.xda-developers.com/wiki/index.php?title=Extract_initramfs_from_zImage
+#
+# The problem with that script is that the gzip magic number occasionally
+# occurs naturally, meaning that some non-compressed files get uncompressed.
+###########################
+# 
+# This is an updated version of the script found at
+#  https://github.com/davidmroth/Extract-Kernel-Initramfs
+#
+# The problems with that script are documented in the README
+###############################################################################
+
+#####
+# Configuration options that you really shouldn't need to touch anyway.
+DEBUG=${DEBUG:-}
+KEEP_FILES=${KEEP_FILES:-}
+
+##
+# Should not need to edit below this point.
+############################################
+VERSION="0.2b"
+####
+# outputs help
+####
+function show_help()
+{
+cat <<EOF
+    Available options:
+
+      -q        -- query archive (cpio -t)
+      -x        -- extract archive (cpio)
+      -d        -- extract archive (directory root)
+      -o <path> -- output filename / directory
+      -h        -- this output
+
+    Example usage:
+      eki -d -o /tmp/initramfs /boot/vmlinuz.bin
+EOF
+    exit 0
+}
+
+####
+# Helper functions
+####
+
+# echo only on debug
+function echo_debug() { [ -z $DEBUG ] || builtin echo "-D- $@" >&2; }
+
+# echo an error
+function echo_error() { builtin echo "-E- $@" >&2; }
+
+# overlay standard echo
+function echo() { builtin echo "-I- $@" >&2; }
+
+# use grep to search for compression signature
+function find_position() { grep -Pabo $1 "$2" 2>/dev/null; }
+
+# temp file
+function xmktemp()
+{
+    local tmpfile=
+
+    echo_debug "Creating tempfile ($1)"
+    tmpfile=$(mktemp -q --tmpdir eki-$1-XXXXX)
+    if [ ! -e "$tmpfile" ]; then
+        echo_debug "Failed to create '$tmpfile'"
+        echo "Bootstrap failed"
+        return 1
+    fi
+    echo_debug "Successfully created '$tmpfile'"
+
+    builtin echo -n "$tmpfile"
+}
+
+# clean tempfile
+function cleantemp()
+{
+    if [ -z "$KEEP_FILES" ]; then
+        echo_debug "Removing '$1' and '$2'"
+        rm -rf -- "$1" "$2"
+    else
+        echo "You have enabled KEEP_FILES"
+        echo "Left over files available at:"
+        echo "  > $1"
+        echo "  > $2"
+    fi
+    exit ${3:-1}
+}
+####
+# Supported signatures
+#####
+
+# Signatures
+ALL_SIGS='gzip bzip2 lzma none'
+GZIP_SIG='\x1F\x8B\x08'
+BZIP_SIG='\x31\x41\x59\x26\x53\x59'
+LZMA_SIG='\x5D\x00\x..\xFF\xFF\xFF\xFF\xFF\xFF'
+CPIO_SIG='070701'
+
+####
+# Wrapper to use appropriate decompression tool
+# exports SIGNATURE, COMMAND, CSCHEME and SIG_ADJ (signature offset adjustment)
+# environment variables. use: use_signature --zap to unset.
+####
+function use_signature()
+{
+    echo_debug "Function: use_signature()"
+
+    SIG_ADJ=1
+    case $1 in
+        gzip)
+            SIGNATURE=$GZIP_SIG
+            COMMAND='gunzip -9fq'
+            CSCHEME=gzip
+            ;;
+        bzip2)
+            SIGNATURE=$BZIP_SIG
+            COMMAND='bunzip2 -q'
+            CSCHEME=bzip2
+            SIG_ADJ=-3
+            ;;
+        lzma)
+            SIGNATURE=$LZMA_SIG
+            COMMAND='unlzma -q'
+            CSCHEME=lzma
+            ;;
+        none)
+            SIGNATURE=$CPIO_SIG
+            COMMAND=cat
+            CSCHEME=none
+            ;;
+
+        --zap)
+            unset SIGNATURE COMMAND CSCHEME SIG_ADJ
+            return 0
+            ;;
+
+        *)
+            echo_error "Invalid usage of use_signature()"
+            exit 1
+    esac
+
+    export SIGNATURE COMMAND CSCHEME SIG_ADJ
+}
+
+# uncompress kernel
+function uncompress_kernel()
+{
+    local image=$1 scheme=gzip pos= size= newsize=
+    echo_debug "Function: uncompress_kernel('$1')"
+
+    pos=$(find_position $GZIP_SIG "$image" | cut -f1 -d:)
+    size=$(stat -c '%s' "$image")
+
+    echo_debug "Size: ${size}bytes, Rewind Offset: ${pos}bytes"
+    if [ -z $pos -o -z $size ]; then
+        echo_error "Compressed kernel image not found"
+        return 1
+    fi
+
+    newsize=$((size - pos))
+    echo "Extracting compressed kernel image from file"
+    echo "  > kernel image: $image"
+    echo "  > kernel image size: $size"
+    echo "  > compression scheme: $scheme"
+    echo "  > position: $pos"
+    echo "  > size after strip: $newsize"
+
+    ## BUG?!?
+    tail -c $newsize "$image" | gunzip -q9f - 2>/dev/null
+    if [ $? -ne 0 ]; then
+        echo_debug "gunzip failed?"
+        return 1
+    fi
+
+    return 0
+}
+
+# detect compression
+function detect_compression()
+{
+    local scheme= image=$1 pos= found=
+
+    echo_debug "Function: detect_compression('$1')"
+    echo "Detecting compression type"
+
+    for scheme in $ALL_SIGS; do
+        use_signature $scheme
+        echo_debug "Checking for '$scheme'"
+
+        # search for signature
+        pos=$(find_position $SIGNATURE "$image" | cut -f1 -d:)
+        pos=$(builtin echo -n $pos | sed 's/\n/ /g') # yuck
+        [ $? -eq 0 ] || continue
+
+        if [ -z "$pos" ]; then
+            # shouldn't get here.
+            echo_error "Something went wrong on signature check '$scheme'"
+            return 1
+        fi
+
+        echo_debug "Found '$scheme'; breaking loop. ( $pos )"
+        found=1; break
+    done
+
+    echo_debug "  > Command: $COMMAND"
+    echo_debug "  > Compression: $CSCHEME"
+    echo_debug "  > Adjustment: $SIG_ADJ"
+
+    # no archive was found.
+    if [ -z $found ]; then
+        echo_error "No archive was found in file '$image'"
+        echo_error "Please verify that you supplied the correct kernel image."
+        return 1
+    fi
+
+    # "return" the compression scheme and position(s)
+    builtin echo -n "$CSCHEME $pos"
+}
+####
+# find cpio archive relative of position
+####
+function find_archive()
+{
+    local image="$1" archive=($2) total=${#archive[@]} a=0
+    local pos= output="$3" sig=${archive[0]} found=
+    
+    echo_debug "Function: find_archive('$1', $2, '$3')"
+    echo "Detected $((total - 1)) potential archives"
+
+    echo_debug "Using signature '$sig'"
+    use_signature "$sig" # shouldn't fail.
+
+    for((a = 1; a < $total; a++)) {
+        echo "Trying #$a"
+
+        pos=$((${archive[$a]} + SIG_ADJ))
+        echo_debug "  reverse_offset=$pos command=$COMMAND"
+        echo_debug "  \$ tail -c +$pos \"$image\" | $COMMAND" \
+                   "2>/dev/null > \"$output\""
+
+        # tail bytes and pass through to $COMMAND
+        tail -c +$pos "$image" | $COMMAND 2>/dev/null > "$output"
+        if [ $? -ne 0 ]; then
+            cat /dev/null > "$output"
+            echo_debug "Try #$a of $((total - 1)) for '$CSCHEME' failed."
+            echo "  > ... Failed"
+            continue;
+        else
+            echo "  > ... Success"
+            found=1; break
+        fi
+    }
+    use_signature --zap
+
+    if [ -z "$found" ]; then
+        echo_error "All archive extraction attempts failed. Aborting"
+        return 1;
+    fi
+}
+
+####
+# main invocation of this script
+####
+[ -z $SOURCED ] && \
+function main()
+{
+    local opt= mode=query output= image=
+    local imgo= tmpfile= offsets=
+    local imgfile=
+
+    while getopts :qxdo: opt; do
+        case "$opt" in
+            q)
+                mode=query
+                ;;
+            x)
+                mode=cpio
+                ;;
+            d)
+                mode=extract
+                ;;
+            o)
+                [ -z $OPTARG ] && show_help
+                output=$OPTARG
+                ;;
+            *)
+                show_help
+                ;;
+        esac
+    done
+
+    ## get kernel image
+    shift $((OPTIND-1))
+    image=$1
+    imgo="$PWD/$(basename "$image")"
+
+    ## verify parameters
+    [ -z "$image" ] && show_help
+    [ "$mode" = "extract" ] && \
+        output=${output:-$imgo.root} ||
+        output=${output:-$imgo.cpio}
+
+    ## verify output doesn't exist
+    if [ -e "$output" -a "$mode" != "query" ]; then
+        echo_error "The output path '$output' exists."
+        echo_error "Please remove '$output' by executing: "
+        builtin echo "      rm -fr '$output'" >&2
+        exit 1
+    fi
+
+    ## a header.
+    echo "Extract Kernel Initramfs (eki) v$VERSION"
+    echo "Based on http://tinyurl.com/nclkczx and " \
+         "http://tinyurl.com/49aos4h"
+    echo "Source available at" \
+         "https://github.com/jotaki/Extract-Kernel-Initramfs"
+    echo "============================="
+    echo "Bootstrapping..."
+    tmpfile=$(xmktemp kernel)
+    [ $? -eq 0 ] || exit 1
+
+    imgfile=$(xmktemp initramfs)
+    if [ $? -ne 0 ]; then
+        rm -rf -- "$tmpfile"
+        exit 1
+    fi
+    echo "Bootstrapping complete"
+
+    ## "decompress" kernel image (really extracts it)
+    uncompress_kernel "$image" > "$tmpfile"
+    [ $? -eq 0 ] || cleantemp "$tmpfile" "$imgfile"
+
+    ## find potential archive offsets
+    offsets=$(detect_compression "$tmpfile")
+    [ $? -eq 0 ] || cleantemp "$tmpfile" "$imgfile"
+
+    ## attempt to open/verify archive
+    find_archive "$tmpfile" "$offsets" "$imgfile"
+    [ $? -eq 0 ] || cleantemp "$tmpfile" "$imgfile"
+
+    echo_debug "Inspecting mode..."
+    case "$mode" in
+        query)
+            echo_debug "  > Querying archive"
+            cpio -t < "$imgfile" | less
+            echo_debug "  > Finished"
+            ;;
+        cpio)
+            echo_debug "  > Copying file '$imgfile' to '$output'"
+            cp -af "$imgfile" "$output"
+            echo_debug "  > Finished"
+            ;;
+        extract)
+            if [ -f "$output" ]; then
+                echo_error "Invalid usage, expected directory at '$output'"
+                break;
+            fi
+
+            echo_debug "Creating directory '$output'"
+            mkdir -p "$output"
+
+            echo_debug "Changing directory to '$output'"
+            cd "$output" 2>/dev/null >&2
+
+            echo_debug "Extracting '$imgfile' to '$output'"
+            cpio --quiet -i \
+                --make-directories \
+                --preserve-modification-time \
+                --no-absolute-filenames 2>/dev/null >&2 \
+                < "$imgfile"
+
+            echo_debug "Image file extracted"
+            echo_debug "Changing directory to '$OLDPWD'"
+            cd - 2>/dev/null >&2
+            ;;
+        *)
+            echo "Not sure what to do in this mode."
+            echo "Mode provided: '$mode'"
+            ;;
+    esac
+
+    ## inform the user where to find the archive/root
+    [ "$mode" != "query" ] && echo "Resulting output available in '$output'"
+
+    ## Keep files?
+    if [ -z "$KEEP_FILES" ]; then
+        cleantemp "$tmpfile" "$imgfile"
+    else
+        echo "You have enabled KEEP_FILES"
+        echo "Left over files at:"
+        echo "  > $tmpfile"
+        echo "  > $imgfile"
+    fi
+}
+
+# source protect
+[ -z $SOURCED ] && main $@
