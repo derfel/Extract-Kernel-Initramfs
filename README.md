@@ -36,18 +36,22 @@ This concats all the necessary \*.sh files into one script named 'eki'.
 
 The following environment variables can be used
 
-|| DEBUG || Non-blank value enables debug messages ||
-|| TMPDIR || prefix to mktemp files (read mktemp(1)) ||
-|| KEEP_FILES || Non-blank value enables keeping of temporary files ||
+| Variable | Description |
+| -------- | ------------|
+| DEBUG    | Non-blank value enables debug messages |
+| TMPDIR   | prefix to mktemp files (read mktemp(1)) |
+| KEEP_FILES | Non-blank value enables keeping of temporary files |
 
 ## Command Line Configuration Options
 
-|| -q || Don't extract archive, only query (cpio -t) ||
-|| -o <path> || output filename / directory path ||
-|| -d || extract archive to directory root ||
-|| -x || extract archive as cpio archive ||
-|| -h || outputs help information ||
-|| no options || same as -q option ||
+|   Option   | Description |
+| ---------- | ----------- |
+| -q         | Don't extract archive, only query (cpio -t) |
+| -o <path>  | output filename / directory path |
+| -d         | extract archive to directory root |
+| -x         | extract archive as cpio archive |
+| -h         | outputs help information |
+| no options | same as -q option |
 
 ## Bugs?!?
 ---
@@ -75,25 +79,31 @@ Another place I can be reached is zer0python@ircs://irc.freenode.net/peltkore
 ### Source Files
 ---
 
-|| unpack-initramfs || original script that 'eki' is based on (kept for whatever reason) ||
-|| main.sh || main invocation of eki ||
-|| archive.sh || Search for cpio archive in kernel image ||
-|| cdetect.sh || Uncompress kernel and detect compression functions ||
-|| header.sh || Header for eki script includes environment settings ||
-|| helper.sh || Mostly 1 line helper functions for convenience ||
-|| signature.sh || Supported compression signatures ||
+| Filename | Details |
+| -------- | ------- |
+| unpack-initramfs | original script that 'eki' is based on (kept for whatever reason) |
+| -------- | ------- |
+| main.sh | main invocation of eki |
+| archive.sh | Search for cpio archive in kernel image |
+| cdetect.sh | Uncompress kernel and detect compression functions |
+| header.sh | Header for eki script includes environment settings |
+| helper.sh | Mostly 1 line helper functions for convenience |
+| signature.sh | Supported compression signatures |
 
 ### Build Files
 ---
 
-|| Makefile || wrapper to run the concat shell script ||
-|| concat || shell script to concat eki source files together ||
+| Filename | Details |
+| -------- | ------- |
+| Makefile | wrapper to run the concat shell script |
+| concat | shell script to concat eki source files together |
 
 ### Misc files
 ---
-
-|| README.md || this file ||
-|| .gitignore || The gitignore file, heh ||
+| Filename | Details |
+| -------- | ------- |
+| README.md | this file |
+| .gitignore | The gitignore file, heh |
 
 #### Example output
 ---
