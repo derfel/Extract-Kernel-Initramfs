@@ -16,6 +16,3 @@
 # root initramfs
 root
 *.root
-
-# eki script it self. Since it should be built via the concat script/Makefile
-eki
