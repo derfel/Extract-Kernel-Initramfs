@@ -12,6 +12,16 @@
   * Refactored code (a lot)
   * use tail instead of dd for increased speed.
   * loop signature sequences on failure of extraction
+  * use mktemp for temporary files (instead of hard configured environment variables)
+  * support command line arguments to specify extraction type.
+
+ * Untested features
+  * no compressed cpio archive
+  * lzma compressed cpio archive
+  * bzip2 compressed cpio archive
+
+ * Unsupported features (but could easily be added?)
+  * Non-gzip compressed kernel.
 
  * Using Extract Kernel Initramfs (eki):
   * Use ```eki vmlinuz.img``` to view the archive contents
