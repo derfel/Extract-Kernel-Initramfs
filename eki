@@ -55,7 +55,8 @@ function echo_error() { builtin echo "-E- $@" >&2; }
 function echo() { builtin echo "-I- $@" >&2; }
 
 # use grep to search for compression signature
-function find_position() { grep -Pabo $1 "$2" 2>/dev/null; }
+# use "C" locale to avoid interpreting as UTF-8 sequences
+function find_position() { LC_ALL=C grep -Pabo $1 "$2" 2>/dev/null; }
 
 # temp file
 function xmktemp()
