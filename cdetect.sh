@@ -8,7 +8,7 @@ function uncompress_kernel()
     size=$(stat -c '%s' "$image")
 
     echo_debug "Size: ${size}bytes, Rewind Offset: ${pos}bytes"
-    if [ -z $pos -o -z $size ]; then
+    if [ -z "$pos" -o -z "$size" ]; then
         echo_error "Compressed kernel image not found"
         return 1
     fi
